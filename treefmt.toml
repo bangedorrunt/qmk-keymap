@@ -1,0 +1,5 @@
+[formatter.c]
+command = "clang-format"
+options = []
+includes = ["*.c", "*.cpp", "*.h"]
+excludes = []
