@@ -57,28 +57,83 @@ uint16_t get_quick_tap_term(uint16_t keycode, keyrecord_t* record) {
 }
 
 #ifdef FLOW_TAP_TERM
+bool is_flow_tap_key(uint16_t keycode) {
+  if ((get_mods() & (MOD_MASK_CG | MOD_BIT_LALT)) != 0) {
+    return false;  // Disable Flow Tap on hotkeys.
+  }
+  // Extract the tap keycode from tap-hold keys
+  uint16_t tap_keycode = keycode;
+  if (IS_QK_MOD_TAP(keycode)) {
+    tap_keycode = QK_MOD_TAP_GET_TAP_KEYCODE(keycode);
+  } else if (IS_QK_LAYER_TAP(keycode)) {
+    tap_keycode = QK_LAYER_TAP_GET_TAP_KEYCODE(keycode);
+  }
+
+  switch (tap_keycode) {
+    case KC_SPC:
+    case KC_A ... KC_Z:
+    case KC_DOT:
+    case KC_COMM:
+    case KC_SCLN:
+    case KC_SLSH:
+      return true;
+  }
+  return false;
+}
+
 uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t* record,
                            uint16_t prev_keycode) {
   // Only apply Flow Tap when following a letter key, and not hotkeys.
-  if (KC_A <= prev_keycode && prev_keycode <= KC_Z) {
+  if (is_flow_tap_key(keycode) && is_flow_tap_key(prev_keycode)) {
     switch (keycode) {
-      case HRM_A:
-      case HRM_S:
-      case HRM_D:
       case HRM_F:
       case HRM_J:
-      case HRM_K:
-      case HRM_L:
-      case HRM_SCLN:
       case NAV_W:
       case NUM_V:
         return FLOW_TAP_TERM - 35;  // Shorter timeout otherwise
+      case HRM_A:
+      case HRM_S:
+      case HRM_D:
+      case HRM_K:
+      case HRM_L:
+      case HRM_SCLN:
+        return FLOW_TAP_TERM;  // Longer timeout otherwise.
     }
   }
 
   return 0;  // Disable Flow Tap otherwise.
 }
 #endif  // FLOW_TAP_TERM
+
+// Track the previous keycode to make contextual decisions for speculative hold
+static uint16_t prev_keycode = 0;
+
+bool get_speculative_hold(uint16_t keycode, keyrecord_t* record) {
+  // Define keys that should have contextual speculative hold behavior
+  bool is_contextual_key = (keycode == HRM_F || keycode == HRM_J);
+  bool prev_was_space = prev_keycode == KC_SPC;
+
+  // Disable speculative hold for certain keys when they follow space
+  // to prevent issues with chorded sequences in editors and other applications
+  if (is_contextual_key && prev_was_space) {
+    return false;
+  }
+
+  switch (keycode) {  // Enable speculative holding for these keys.
+    case HRM_A:
+    case HRM_S:
+    case HRM_D:
+    case HRM_F:
+    case HRM_J:
+    case HRM_K:
+    case HRM_L:
+    case HRM_SCLN:
+    case NUM_V:
+    case NAV_W:
+      return true;
+  }
+  return false;  // Disable otherwise.
+}
 
 #ifdef COMBO_ENABLE
 const uint16_t combo_dummy[] PROGMEM = {COMBO_END};
@@ -95,6 +150,9 @@ void keyboard_post_init_user(void) {}
 
 bool process_record_user(uint16_t keycode, keyrecord_t* record) {
   if (record->event.pressed) {
+    // Update the previous keycode when a key is pressed
+    prev_keycode = keycode;
+
     switch (keycode) {
       case USRNAME:
         SEND_STRING_DELAY("bangedorrunt", TAP_CODE_DELAY);
